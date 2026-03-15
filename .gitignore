@@ -1,6 +1,7 @@
 node_modules/
 dist/
-output/
+# output/ is tracked (user requested pushing screenshots)
+# output/
 .env
 *.log
 playwright-report/

@@ -31,6 +31,11 @@ export const ENV = {
 
   outputDir: optional("OUTPUT_DIR", "output")!,
 
+  autoGitPush: bool("AUTO_GIT_PUSH", false),
+  gitCommitMessage: optional("GIT_COMMIT_MESSAGE", "update code")!,
+  gitPushRemote: optional("GIT_PUSH_REMOTE", "origin")!,
+  gitPushBranch: optional("GIT_PUSH_BRANCH", "main")!,
+
   headless: bool("HEADLESS", true),
   slowMoMs: num("SLOW_MO_MS", 0),
   viewportWidth: num("VIEWPORT_WIDTH", 1920),

@@ -1,9 +1,13 @@
 import { chromium } from "playwright";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { exec as execCb } from "node:child_process";
+import { promisify } from "node:util";
 import { ENV } from "./env.js";
 import { TIMEFRAMES, timeframeLabel } from "./config.js";
 import { addIndicatorsBestEffort, gotoChart, hidePopupsBestEffort, setTimeframe } from "./tv.js";
+
+const exec = promisify(execCb);
 
 function buildChartUrl() {
   // Prefer explicit CHART_URL if provided; otherwise open generic chart with symbol param.
@@ -22,16 +26,26 @@ async function ensureDir(p: string) {
   await fs.mkdir(p, { recursive: true });
 }
 
-function todayStr() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
+async function gitAutoPushIfEnabled() {
+  if (!ENV.autoGitPush) return;
 
-  return `${yyyy}-${mm}-${dd}_${hh}-${mi}-${ss}`;
+  // Only commit when there are changes
+  const { stdout: status } = await exec("git status --porcelain");
+  if (!status.trim()) {
+    console.log("Git: no changes to commit.");
+    return;
+  }
+
+  await exec("git add .");
+  try {
+    await exec(`git commit -m "${ENV.gitCommitMessage.replaceAll('"', '\\"')}"`);
+  } catch (e: any) {
+    // In case another process committed or nothing to commit.
+    const msg = String(e?.stdout ?? e?.message ?? e);
+    console.warn("Git commit warning:", msg);
+  }
+  await exec(`git push ${ENV.gitPushRemote} ${ENV.gitPushBranch}`);
+  console.log(`Git: pushed to ${ENV.gitPushRemote} ${ENV.gitPushBranch}`);
 }
 
 async function main() {
@@ -93,7 +107,24 @@ async function main() {
     await addIndicatorsBestEffort(page);
   }
 
-  const outRoot = path.join(process.cwd(), ENV.outputDir, ENV.symbol.replace(/[:/\\]/g, "_"), todayStr());
+  const outRoot = path.join(process.cwd(), ENV.outputDir, ENV.symbol.replace(/[:/\\]/g, "_"));
+
+  // Clear old screenshots for this symbol before taking new ones
+  // Windows sometimes locks folders (Explorer preview, antivirus, etc.).
+  // Use retries; if it still fails, fall back to deleting files inside.
+  try {
+    await fs.rm(outRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (e: any) {
+    const code = e?.code;
+    console.warn("Warning: could not remove output dir (", code, "). Falling back to deleting files inside...");
+    try {
+      const entries = await fs.readdir(outRoot, { withFileTypes: true });
+      for (const ent of entries) {
+        const p = path.join(outRoot, ent.name);
+        await fs.rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(() => {});
+      }
+    } catch {}
+  }
   await ensureDir(outRoot);
 
   for (const tf of TIMEFRAMES) {
@@ -107,6 +138,9 @@ async function main() {
     await page.screenshot({ path: outPath, fullPage: true });
     console.log("Saved:", outPath);
   }
+
+  // After screenshots, optionally commit & push results to GitHub
+  await gitAutoPushIfEnabled();
 
   await context.close();
   await browser.close();
