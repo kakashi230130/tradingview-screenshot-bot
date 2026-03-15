@@ -1,0 +1,21 @@
+{
+  "name": "tradingview-screenshot-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "shot": "node --env-file=.env dist/index.js",
+    "shot:headed": "node --env-file=.env dist/index.js --headed",
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --env-file=.env --loader ts-node/esm src/index.ts --headed",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "playwright": "^1.51.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "typescript": "^5.8.2"
+  }
+}
